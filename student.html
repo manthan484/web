@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Dashboard - Complaints</title>
+    <link rel="stylesheet" href="maincss.css">
+</head>
+<body>
+
+<div class="dashboard-container">
+
+    <h2>Student Dashboard</h2>
+
+    <div class="dashboard-menu">
+        <button onclick="showSection('complaint')">Raise Complaint</button>
+        <button onclick="showSection('status'); loadMyComplaints();">Track Complaints</button>
+        <button onclick="logout()">Logout</button>
+    </div>
+
+    <!-- Raise Complaint -->
+    <div id="complaint" class="section">
+        <h3>Raise a Complaint</h3>
+        <form id="complaintForm" onsubmit="submitComplaint(event)">
+            <label>Category</label>
+            <select name="category" required>
+                <option value="">-- Select --</option>
+                <option value="Electricity">Electricity</option>
+                <option value="Water">Water</option>
+                <option value="Cleanliness">Cleanliness</option>
+                <option value="Furniture">Furniture</option>
+                <option value="Internet">Internet</option>
+                <option value="Other">Other</option>
+            </select>
+
+            <label>Description</label>
+            <textarea name="description" placeholder="Describe your issue" required></textarea>
+
+            <label>Priority</label>
+            <select name="priority" required>
+                <option value="Low">Low</option>
+                <option value="Medium" selected>Medium</option>
+                <option value="High">High</option>
+            </select>
+
+            <label>Image (optional)</label>
+            <input type="file" name="image" accept="image/*">
+
+            <button type="submit">Submit Complaint</button>
+        </form>
+    </div>
+
+    <!-- Track Complaints -->
+    <div id="status" class="section" style="display:none;">
+        <h3>My Complaints</h3>
+        <div id="complaintList"></div>
+    </div>
+
+</div>
+
+<script src="script.js"></script>
+<script>
+const API_URL = "http://localhost:5000/api";
+
+function getToken() {
+    return localStorage.getItem("token");
+}
+
+function showSection(sectionId) {
+    document.querySelectorAll(".section").forEach(sec => sec.style.display = "none");
+    const el = document.getElementById(sectionId);
+    if (el) el.style.display = "block";
+}
+
+function logout() {
+    localStorage.clear();
+    window.location.href = "frontend1.html";
+}
+
+// Submit complaint (multipart for optional image)
+function submitComplaint(event) {
+    event.preventDefault();
+    const form = document.getElementById("complaintForm");
+    const fd = new FormData(form);
+    const token = getToken();
+    if (!token) { alert("Please login again"); window.location.href = "frontend1.html"; return; }
+
+    fetch(`${API_URL}/complaints`, {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + token },
+        body: fd
+    })
+    .then(res => res.json())
+   .then(data => {
+    if (data.message && data.message.toLowerCase().includes("success")) {
+        alert("✅ Complaint submitted successfully!");
+        form.reset();
+    } else {
+        alert(data.message || "❌ Failed to submit complaint");
+    }
+})
+
+    .catch(() => alert("Server error"));
+}
+
+// Load and display student's complaints
+function loadMyComplaints() {
+    const token = getToken();
+    if (!token) { alert("Please login again"); window.location.href = "frontend1.html"; return; }
+
+    fetch(`${API_URL}/complaints/student`, {
+        headers: { "Authorization": "Bearer " + token }
+    })
+    .then(res => res.json())
+    .then(complaints => {
+        const listEl = document.getElementById("complaintList");
+        if (!Array.isArray(complaints)) { listEl.innerHTML = "<p>No complaints yet.</p>"; return; }
+        if (complaints.length === 0) { listEl.innerHTML = "<p>No complaints yet.</p>"; return; }
+
+        let html = "<table><tr><th>ID</th><th>Category</th><th>Priority</th><th>Status</th><th>Created</th><th>Resolved</th><th>Feedback</th></tr>";
+        complaints.forEach(c => {
+            const created = c.created_at ? new Date(c.created_at).toLocaleDateString() : "-";
+            const resolved = c.resolved_at ? new Date(c.resolved_at).toLocaleDateString() : "-";
+            const canFeedback = c.status === "Resolved" && !c.feedback_rating;
+            html += `<tr class="status-${(c.status || "").replace(/\s/g, "")} ${c.is_overdue ? 'overdue' : ''}">
+                <td>${c.id}</td><td>${c.category || "-"}</td><td>${c.priority || "-"}</td><td>${c.status || "-"}</td>
+                <td>${created}</td><td>${resolved}</td>
+                <td>${canFeedback ? `<button onclick="openFeedback(${c.id})">Give Feedback</button>` : (c.feedback_rating ? `Rated ${c.feedback_rating}/5` : "-")}</td>
+            </tr>`;
+        });
+        html += "</table>";
+        listEl.innerHTML = html;
+    })
+    .catch(() => document.getElementById("complaintList").innerHTML = "<p>Failed to load complaints.</p>");
+}
+
+// Open feedback modal/form for a resolved complaint
+function openFeedback(complaintId) {
+    const rating = prompt("Rate 1-5 (number only):");
+    if (rating === null) return;
+    const num = parseInt(rating, 10);
+    if (num < 1 || num > 5) { alert("Rating must be 1-5"); return; }
+    const comment = prompt("Optional comment:");
+    const token = getToken();
+    if (!token) return;
+
+    fetch(`${API_URL}/complaints/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ complaint_id: complaintId, feedback_rating: num, feedback_comment: comment || "" })
+    })
+    .then(res => res.json())
+    .then(data => { alert(data.message || "Feedback submitted"); loadMyComplaints(); })
+    .catch(() => alert("Server error"));
+}
+
+// Redirect if not student
+(function() {
+    if (localStorage.getItem("role") !== "student") {
+        window.location.href = "frontend1.html";
+    }
+})();
+</script>
+</body>
+</html>

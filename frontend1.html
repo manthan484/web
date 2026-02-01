@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>University Residence Login</title>
+    <link rel="stylesheet" href="maincss.css">
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+
+<div class="login-container">
+
+    <h2 class="login-title">UNIVERSITY HOSTEL LOGIN</h2>
+
+    <!-- Role Selection -->
+    <div class="role-selection">
+        <button id="studentBtn" class="role-btn active" type="button"
+                onclick="selectRole('student')">Student</button>
+
+        <button id="wardenBtn" class="role-btn" type="button"
+                onclick="selectRole('warden')">Warden</button>
+    </div>
+
+    <!-- Login Form -->
+    <form class="login-form" onsubmit="login(event)">
+        <input type="hidden" id="role" value="student">
+
+        <div class="input-group">
+            <input type="text" id="username" placeholder="Username" required>
+        </div>
+
+        <div class="input-group">
+            <input type="password" id="password" placeholder="Password" required>
+        </div>
+
+        <button type="submit" class="login-button">LOGIN</button>
+    </form>
+
+    <!-- Direct Page Navigation -->
+    <div style="margin-top: 15px; text-align: center;">
+        <!-- <button type="button" onclick="location.href='student.html'">
+            Go to Student Page
+        </button>
+
+        <button type="button" onclick="location.href='warden.html'">
+            Go to Warden Page
+        </button> -->
+    </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maintenance Staff Dashboard</title>
+    <link rel="stylesheet" href="maincss.css">
+</head>
+<body>
+
+<div class="dashboard-container">
+
+    <h2>Maintenance Staff Dashboard</h2>
+
+    <div class="dashboard-menu">
+        <button onclick="loadAssigned(); showSection('list');">My Assigned Complaints</button>
+        <button onclick="logout()">Logout</button>
+    </div>
+
+    <div id="list" class="section">
+        <h3>Assigned Complaints</h3>
+        <div id="assignedList"></div>
+    </div>
+
+</div>
+
+<script src="script.js"></script>
+<script>
+const API_URL = "http://localhost:5000/api";
+
+function getToken() {
+    return localStorage.getItem("token");
+}
+
+function showSection(sectionId) {
+    document.querySelectorAll(".section").forEach(sec => sec.style.display = "none");
+    const el = document.getElementById(sectionId);
+    if (el) el.style.display = "block";
+}
+
+function logout() {
+    localStorage.clear();
+    window.location.href = "frontend1.html";
+}
+
+function loadAssigned() {
+    const token = getToken();
+    if (!token) { window.location.href = "frontend1.html"; return; }
+
+    fetch(`${API_URL}/maintenance/complaints`, { headers: { "Authorization": "Bearer " + token } })
+        .then(res => res.json())
+        .then(complaints => {
+            const wrap = document.getElementById("assignedList");
+            if (!Array.isArray(complaints) || complaints.length === 0) {
+                wrap.innerHTML = "<p>No complaints assigned to you.</p>";
+                return;
+            }
+            let html = "<table><tr><th>ID</th><th>Student</th><th>Category</th><th>Priority</th><th>Status</th><th>Description</th><th>Actions</th></tr>";
+            complaints.forEach(c => {
+                html += `<tr class="${c.is_overdue ? 'overdue' : ''}">
+                    <td>${c.id}</td><td>${c.student_name || "-"}</td><td>${c.category}</td><td>${c.priority}</td><td>${c.status}</td>
+                    <td>${(c.description || "").substring(0, 50)}${(c.description || "").length > 50 ? "..." : ""}</td>
+                    <td>
+                        <select onchange="updateStatus(${c.id}, this.value)"><option value="">Status</option><option value="In Progress">In Progress</option><option value="Resolved">Resolved</option><option value="Rejected">Rejected</option></select>
+                        <button type="button" onclick="resolveTask(${c.id})">Resolve & Add Notes</button>
+                    </td>
+                </tr>`;
+            });
+            html += "</table>";
+            wrap.innerHTML = html;
+        })
+        .catch(() => document.getElementById("assignedList").innerHTML = "<p>Failed to load.</p>");
+}
+
+function updateStatus(id, status) {
+    if (!status) return;
+    const token = getToken();
+    fetch(`${API_URL}/maintenance/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ id, status })
+    })
+        .then(res => res.json())
+        .then(() => loadAssigned())
+        .catch(() => alert("Failed"));
+}
+
+function resolveTask(complaintId) {
+    const notes = prompt("Resolution notes:");
+    if (notes === null || !notes.trim()) return;
+    const token = getToken();
+    fetch(`${API_URL}/maintenance/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ complaint_id: complaintId, resolution_notes: notes, mark_resolved: true })
+    })
+        .then(res => res.json())
+        .then(() => { alert("Marked resolved"); loadAssigned(); })
+        .catch(() => alert("Failed"));
+}
+
+(function() {
+    if (localStorage.getItem("role") !== "maintenance") {
+        window.location.href = "frontend1.html";
+    }
+    loadAssigned();
+})();
+</script>
+</body>
+</html>

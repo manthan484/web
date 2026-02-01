@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Warden / Admin Dashboard</title>
+    <link rel="stylesheet" href="maincss.css">
+</head>
+<body>
+
+<div class="dashboard-container">
+
+    <h2>Warden / Admin Dashboard</h2>
+
+    <div class="dashboard-menu">
+        <button onclick="showSection('allComplaints'); loadComplaints(); loadStaff();">All Complaints</button>
+        <button onclick="showSection('assign'); loadStaff(); loadComplaints();">Assign Task</button>
+        <button onclick="showSection('analytics'); loadAnalytics();">Analytics</button>
+        <button onclick="logout()">Logout</button>
+    </div>
+
+    <!-- All Complaints -->
+    <div id="allComplaints" class="section">
+        <h3>All Complaints</h3>
+        <div class="filters">
+            <select id="filterStatus" onchange="loadComplaints()">
+                <option value="">All status</option>
+                <option value="Pending">Pending</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Resolved">Resolved</option>
+                <option value="Rejected">Rejected</option>
+            </select>
+            <select id="filterPriority" onchange="loadComplaints()">
+                <option value="">All priority</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+            </select>
+            <select id="filterCategory" onchange="loadComplaints()">
+                <option value="">All category</option>
+                <option value="Electricity">Electricity</option>
+                <option value="Water">Water</option>
+                <option value="Cleanliness">Cleanliness</option>
+                <option value="Furniture">Furniture</option>
+                <option value="Internet">Internet</option>
+                <option value="Other">Other</option>
+            </select>
+            <input type="date" id="filterDateFrom" onchange="loadComplaints()" placeholder="From">
+            <input type="date" id="filterDateTo" onchange="loadComplaints()" placeholder="To">
+            <button type="button" onclick="markOverdue(); loadComplaints();">Refresh Overdue</button>
+        </div>
+        <div id="complaintsTableWrap"></div>
+    </div>
+
+    <!-- Assign Task -->
+    <div id="assign" class="section" style="display:none;">
+        <h3>Assign Complaint to Staff</h3>
+        <div class="assign-form">
+            <label>Complaint</label>
+            <select id="assignComplaintId"></select>
+            <label>Maintenance Staff</label>
+            <select id="assignStaffId"></select>
+            <button type="button" onclick="assignComplaint()">Assign</button>
+        </div>
+    </div>
+
+    <!-- Analytics -->
+    <div id="analytics" class="section" style="display:none;">
+        <h3>Analytics</h3>
+        <div id="analyticsSummary"></div>
+        <div id="analyticsCharts"></div>
+    </div>
+
+</div>
+
+<script src="script.js"></script>
+<script>
+const API_URL = "http://localhost:5000/api";
+
+function getToken() {
+    return localStorage.getItem("token");
+}
+
+function showSection(sectionId) {
+    document.querySelectorAll(".section").forEach(sec => sec.style.display = "none");
+    const el = document.getElementById(sectionId);
+    if (el) el.style.display = "block";
+}
+
+function logout() {
+    localStorage.clear();
+    window.location.href = "frontend1.html";
+}
+
+function markOverdue() {
+    const token = getToken();
+    if (!token) return;
+    fetch(`${API_URL}/admin/mark-overdue`, { method: "POST", headers: { "Authorization": "Bearer " + token } })
+        .then(() => {})
+        .catch(() => {});
+}
+
+function loadComplaints() {
+    const token = getToken();
+    if (!token) { window.location.href = "frontend1.html"; return; }
+    const status = document.getElementById("filterStatus").value;
+    const priority = document.getElementById("filterPriority").value;
+    const category = document.getElementById("filterCategory").value;
+    const dateFrom = document.getElementById("filterDateFrom").value;
+    const dateTo = document.getElementById("filterDateTo").value;
+    const q = new URLSearchParams({});
+    if (status) q.set("status", status);
+    if (priority) q.set("priority", priority);
+    if (category) q.set("category", category);
+    if (dateFrom) q.set("dateFrom", dateFrom);
+    if (dateTo) q.set("dateTo", dateTo);
+
+    fetch(`${API_URL}/admin/complaints?${q}`, { headers: { "Authorization": "Bearer " + token } })
+        .then(res => res.json())
+        .then(complaints => {
+            const wrap = document.getElementById("complaintsTableWrap");
+            if (!Array.isArray(complaints)) { wrap.innerHTML = "<p>No complaints.</p>"; return; }
+            let html = "<table><tr><th>ID</th><th>Student</th><th>Category</th><th>Priority</th><th>Status</th><th>Created</th><th>Overdue</th><th>Actions</th></tr>";
+            complaints.forEach(c => {
+                const created = c.created_at ? new Date(c.created_at).toLocaleString() : "-";
+                const rowClass = (c.priority === "High" ? " priority-high" : "") + (c.is_overdue ? " overdue" : "");
+                html += `<tr class="${rowClass}">
+                    <td>${c.id}</td><td>${c.student_name || "-"}</td><td>${c.category}</td><td>${c.priority}</td><td>${c.status}</td><td>${created}</td><td>${c.is_overdue ? "Yes" : "No"}</td>
+                    <td>
+                        <select onchange="updateStatus(${c.id}, this.value)"><option value="">Change status</option><option value="Pending">Pending</option><option value="In Progress">In Progress</option><option value="Resolved">Resolved</option><option value="Rejected">Rejected</option></select>
+                        <button type="button" onclick="addComment(${c.id})">Comment</button>
+                    </td>
+                </tr>`;
+            });
+            html += "</table>";
+            wrap.innerHTML = html;
+        })
+        .catch(() => document.getElementById("complaintsTableWrap").innerHTML = "<p>Failed to load.</p>");
+}
+
+function updateStatus(id, status) {
+    if (!status) return;
+    const token = getToken();
+    fetch(`${API_URL}/admin/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ id, status })
+    })
+        .then(res => res.json())
+        .then(() => loadComplaints())
+        .catch(() => alert("Failed"));
+}
+
+function addComment(complaintId) {
+    const comment = prompt("Admin comment:");
+    if (comment === null) return;
+    const token = getToken();
+    fetch(`${API_URL}/admin/comment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ complaint_id: complaintId, admin_comments: comment })
+    })
+        .then(res => res.json())
+        .then(() => loadComplaints())
+        .catch(() => alert("Failed"));
+}
+
+let staffList = [];
+function loadStaff() {
+    const token = getToken();
+    if (!token) return;
+    fetch(`${API_URL}/admin/staff`, { headers: { "Authorization": "Bearer " + token } })
+        .then(res => res.json())
+        .then(staff => {
+            staffList = staff || [];
+            const sel = document.getElementById("assignStaffId");
+            sel.innerHTML = "<option value=''>-- Select staff --</option>";
+            staffList.forEach(s => { sel.innerHTML += `<option value="${s.id}">${s.name || s.username}</option>`; });
+        })
+        .catch(() => {});
+}
+
+function loadComplaintsForAssign() {
+    const token = getToken();
+    if (!token) return;
+    fetch(`${API_URL}/admin/complaints`, { headers: { "Authorization": "Bearer " + token } })
+        .then(res => res.json())
+        .then(complaints => {
+            const pending = (complaints || []).filter(c => c.status === "Pending" || c.status === "In Progress");
+            const sel = document.getElementById("assignComplaintId");
+            sel.innerHTML = "<option value=''>-- Select complaint --</option>";
+            pending.forEach(c => { sel.innerHTML += `<option value="${c.id}">#${c.id} - ${c.category} (${c.priority})</option>`; });
+        })
+        .catch(() => {});
+}
+
+function assignComplaint() {
+    const cid = document.getElementById("assignComplaintId").value;
+    const sid = document.getElementById("assignStaffId").value;
+    if (!cid || !sid) { alert("Select complaint and staff"); return; }
+    const token = getToken();
+    fetch(`${API_URL}/admin/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ complaint_id: parseInt(cid, 10), staff_id: parseInt(sid, 10) })
+    })
+        .then(res => res.json())
+        .then(() => { alert("Assigned"); loadComplaintsForAssign(); loadComplaints(); })
+        .catch(() => alert("Failed"));
+}
+
+function loadAnalytics() {
+    const token = getToken();
+    if (!token) return;
+    fetch(`${API_URL}/admin/analytics`, { headers: { "Authorization": "Bearer " + token } })
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById("analyticsSummary").innerHTML = `
+                <p><strong>Total complaints:</strong> ${data.total || 0}</p>
+                <p><strong>Resolved:</strong> ${data.resolved || 0} | <strong>Pending:</strong> ${data.pending || 0} | <strong>In Progress:</strong> ${data.inProgress || 0} | <strong>Rejected:</strong> ${data.rejected || 0}</p>
+                <p><strong>Overdue:</strong> ${data.overdue || 0}</p>
+                <p><strong>Avg resolution time:</strong> ${data.avgResolutionHours != null ? data.avgResolutionHours + " hours" : "N/A"}</p>
+            `;
+            const byCat = data.byCategory || [];
+            let chartHtml = "<h4>By Category</h4><table><tr><th>Category</th><th>Count</th></tr>";
+            byCat.forEach(c => { chartHtml += `<tr><td>${c.category}</td><td>${c.count}</td></tr>`; });
+            chartHtml += "</table>";
+            const byStatus = data.byStatus || [];
+            chartHtml += "<h4>By Status</h4><table><tr><th>Status</th><th>Count</th></tr>";
+            byStatus.forEach(s => { chartHtml += `<tr><td>${s.status}</td><td>${s.count}</td></tr>`; });
+            chartHtml += "</table>";
+            document.getElementById("analyticsCharts").innerHTML = chartHtml;
+        })
+        .catch(() => document.getElementById("analyticsSummary").innerHTML = "<p>Failed to load analytics.</p>");
+}
+
+// When opening Assign section, load complaint dropdown
+document.addEventListener("DOMContentLoaded", function() {
+    const assignSection = document.getElementById("assign");
+    if (assignSection) {
+        const observer = new MutationObserver(function(mutations) {
+            if (document.getElementById("assign").style.display !== "none") loadComplaintsForAssign();
+        });
+        observer.observe(assignSection, { attributes: true, attributeFilter: ["style"] });
+    }
+});
+
+(function() {
+    if (localStorage.getItem("role") !== "warden") {
+        window.location.href = "frontend1.html";
+    }
+})();
+</script>
+</body>
+</html>
